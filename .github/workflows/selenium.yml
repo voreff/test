@@ -1,0 +1,138 @@
+# main.py
+import multiprocessing
+import time
+import random
+import requests
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import undetected_chromedriver as uc  # pip install undetected-chromedriver
+
+# Telegram Bot settings
+BOT_TOKEN = "8124500194:AAFrdBNcB6Cl7edWbHL5S1O71Rr6FDPL1Hw"
+CHAT_ID = 6930610463
+URL = "https://youtu.be/k8Vhbd7N-R0?si=CPig8gUfbS_fpndm"
+
+# Proxies from the provided data
+PROXIES = [
+    {"ip": "170.231.64.112", "port": "5678", "protocol": "socks4"},
+    {"ip": "190.109.72.10", "port": "33633", "protocol": "socks4"},
+    {"ip": "177.93.77.10", "port": "4153", "protocol": "socks4"},
+    {"ip": "82.115.21.188", "port": "1080", "protocol": "socks5"},
+    {"ip": "176.123.56.58", "port": "3629", "protocol": "socks4"},
+    {"ip": "101.108.232.195", "port": "4145", "protocol": "socks4"},
+    {"ip": "1.0.0.181", "port": "80", "protocol": "socks4"},
+    {"ip": "41.216.232.213", "port": "4153", "protocol": "socks4"},
+    {"ip": "124.122.137.249", "port": "4153", "protocol": "socks4"},
+    {"ip": "177.91.101.218", "port": "5678", "protocol": "socks4"}
+]
+
+def parse_duration(duration_str):
+    """Parse MM:SS to seconds"""
+    try:
+        if ':' in duration_str:
+            parts = duration_str.split(':')
+            if len(parts) == 2:
+                return int(parts[0]) * 60 + int(parts[1])
+            elif len(parts) == 3:
+                return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        return 10  # default
+    except:
+        return 10
+
+def send_telegram_message(message):
+    """Send message to Telegram admin"""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {"chat_id": CHAT_ID, "text": message}
+    try:
+        requests.post(url, data=data)
+    except Exception as e:
+        print(f"Telegram error: {e}")
+
+def worker(proxy_info):
+    """Worker function for each process"""
+    ip = proxy_info["ip"]
+    port = proxy_info["port"]
+    protocol = proxy_info["protocol"]
+    proxy_str = f"{protocol}://{ip}:{port}"
+    
+    while True:  # Infinite loop
+        try:
+            # Chrome options
+            options = uc.ChromeOptions()
+            options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option('useAutomationExtension', False)
+            options.add_argument(f"--proxy-server={proxy_str}")
+            # Random user agent
+            user_agents = [
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            ]
+            options.add_argument(f"--user-agent={random.choice(user_agents)}")
+            
+            driver = uc.Chrome(options=options)
+            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            print(f"Loading video with proxy {proxy_str}")
+            driver.get(URL)
+            
+            # Wait for page to load
+            wait = WebDriverWait(driver, 10)
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "video")))
+            
+            # Try to get duration
+            try:
+                duration_elem = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ytp-time-duration")))
+                duration_str = duration_elem.text
+                video_duration = parse_duration(duration_str)
+                print(f"Video duration: {video_duration} seconds")
+            except TimeoutException:
+                video_duration = 10  # fallback
+                print("Could not get duration, using fallback")
+            
+            # Simulate play (YouTube may auto-play, but to be sure)
+            try:
+                play_button = driver.find_element(By.CSS_SELECTOR, ".ytp-play-button")
+                play_button.click()
+                time.sleep(1)
+            except NoSuchElementException:
+                pass
+            
+            # Wait for video to "watch"
+            print(f"Watching video for {video_duration} seconds...")
+            time.sleep(video_duration)
+            
+            # Send confirmation message
+            message = f"Rams viewed from IP: {ip}:{port}"
+            send_telegram_message(message)
+            print(f"Message sent: {message}")
+            
+            driver.quit()
+            
+            # Small delay before reopen
+            time.sleep(random.randint(5, 15))
+            
+        except Exception as e:
+            print(f"Error with proxy {proxy_str}: {e}")
+            send_telegram_message(f"Error with {ip}:{port}: {str(e)}")
+            time.sleep(10)  # Wait before retry
+
+if __name__ == "__main__":
+    # Start 10 parallel processes, one for each proxy
+    processes = []
+    for proxy in PROXIES:
+        p = multiprocessing.Process(target=worker, args=(proxy,))
+        p.start()
+        processes.append(p)
+    
+    # Keep main process alive
+    for p in processes:
+        p.join()
