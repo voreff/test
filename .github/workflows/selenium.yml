@@ -16,7 +16,7 @@ BOT_TOKEN = "8124500194:AAFrdBNcB6Cl7edWbHL5S1O71Rr6FDPL1Hw"
 CHAT_ID = 6930610463
 URL = "https://youtu.be/k8Vhbd7N-R0?si=CPig8gUfbS_fpndm"
 
-# Proxies from the provided data
+# Proxies from the provided data1
 PROXIES = [
     {"ip": "170.231.64.112", "port": "5678", "protocol": "socks4"},
     {"ip": "190.109.72.10", "port": "33633", "protocol": "socks4"},
